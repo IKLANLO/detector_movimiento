@@ -2,18 +2,19 @@
   "name": "detector_movimiento",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "pirController.js",
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js"
   },
+  "type": "module",
   "author": "Iker Landaberea",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "fs": "^0.0.1-security",
-    "nodemailer": "^6.9.14",
+    "node-fetch": "^3.3.2",
     "onoff": "^6.0.3"
   },
   "devDependencies": {

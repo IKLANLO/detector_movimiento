@@ -1,9 +1,9 @@
-require('dotenv').config()
-const gpio = require("onoff").Gpio
+import 'dotenv/config'
+import { Gpio } from 'onoff';
+import { sendMessage } from './botController.js'
 
-const pirPin = process.env.pirPin
-
-const pir = new gpio(pirPin, 'in', 'rising')
+const PIRPIN = process.env.PIRPIN
+const pir = new Gpio(PIRPIN, 'in', 'rising')
 
 // Función para obtener la fecha y hora actuales
 function getFormattedDate() {
@@ -13,7 +13,7 @@ function getFormattedDate() {
     return `${date} ${time}`
 }
 
-//cada vez que el PIR detecte movimiento se imprime un mensaje en terminal
+//cada vez que el PIR detecte movimiento se envía una notificación por Telegram
 pir.watch((err, value) => {
     if (err) {
         console.error('error detectando movimiento', err)
@@ -21,10 +21,9 @@ pir.watch((err, value) => {
     }
         
     if (value === 1){
-        console.log(`[${getFormattedDate()}] movimiento detectado`)
+        sendMessage(`[${getFormattedDate()}] movimiento detectado`)
     }
 })
-
 
 process.on('SIGINT', ()=> {
     //liberamos los recursos utilizados al terminar el programa
