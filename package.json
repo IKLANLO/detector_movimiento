@@ -12,7 +12,9 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "nodemailer": "^6.9.14"
+    "fs": "^0.0.1-security",
+    "nodemailer": "^6.9.14",
+    "onoff": "^6.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
