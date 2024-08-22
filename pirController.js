@@ -7,6 +7,8 @@ import { createLog, writeLog } from './logController.js';
 const PIRPIN = process.env.PIRPIN
 const pir = new Gpio(PIRPIN, 'in', 'rising')
 const movementLogPath = `./logs/log${new Date().valueOf()}.txt`
+let delayTime = 10000
+let lastActivationTime = 0
 
 // Función para obtener la fecha y hora actuales
 function getFormattedDate() {
@@ -15,22 +17,29 @@ function getFormattedDate() {
     const time = now.toLocaleTimeString()
     return `${date} ${time}`
 }
+
 //creamos el archivo del log de respaldo de movimientos
 createLog(movementLogPath)
 
 //cada vez que el PIR detecte movimiento se saca una fotografía, se envía por Telegram
 //junto a una notificación, y se guarda en el log
-pir.watch((err, value) => {
+pir.watch(async (err, value) => {
+    const currentTime = Date.now()
+    
     if (err) {
         console.error('error detectando movimiento', err)
         return 
     }
-        
-    if (value === 1){
+    
+    //las acciones se ejecutan cada 10 segundos
+    if (value === 1 && (currentTime - lastActivationTime) > delayTime){
         const movementDate = getFormattedDate();
-        takeImage(new Date().valueOf())
-        sendMessage(`[${movementDate}] movimiento detectado`);
-        writeLog(movementLogPath, movementDate); 
+        const image = await takeImage(new Date().valueOf())
+        setTimeout(()=>{
+            sendMessage(`[${movementDate}] movimiento detectado`, image);
+            writeLog(movementLogPath, movementDate);
+        }, 10000)
+        lastActivationTime = currentTime
     }
 })
 
