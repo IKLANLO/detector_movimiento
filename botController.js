@@ -31,10 +31,11 @@ export async function sendMessage(message, imagePath) {
         })
 
         const data = await response.json()
+        
         if (!data.ok){
             console.error('Error al enviar el mensaje a Telegram', data.description);
-            
         }
+        
     } catch (err) {
         console.error('Error al enviar el mensaje', err);
     }
