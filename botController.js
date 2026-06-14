@@ -27,7 +27,7 @@ export async function sendMessage(message, imagePath) {
         const response = await fetch(url, {
             method: 'POST',
             body: form,
-            headers: form.headers
+            headers: form.getHeaders()
         })
 
         const data = await response.json()

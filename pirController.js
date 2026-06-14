@@ -37,7 +37,7 @@ pir.watch(async (err, value) => {
             const image = await takeImage(newDate)
             const convertedImage = await convertImage(newDate)
             console.log('Imagen guardada en:', convertedImage)
-            sendMessage(`[${movementDate}] movimiento detectado`, convertedImage)
+            await sendMessage(`[${movementDate}] movimiento detectado`, convertedImage)
             writeLog(movementLogPath, movementDate)
             finishedImg = true
         } catch (error) {

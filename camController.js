@@ -28,7 +28,7 @@ export const takeImage = (imageData) => {
 export const convertImage = (imageData) => {
     //convertimos las imágenes guardadas a MP4 para hacerlas compatibles con Telegram
     return new Promise((resolve, reject) => {
-        const convertImageCommand = `MP4Box -add './images/img'${imageData}'.h264' './images/img'${imageData}'.mp4'`
+        const convertImageCommand = `MP4Box -add "./images/img${imageData}.h264" "./images/img${imageData}.mp4"`
         exec(convertImageCommand, (error, stdout, stderr) => {
             if (error) {
                 console.log('Error al convertir la fotografía', error);
@@ -45,7 +45,8 @@ export const deleteImages = () => {
     return new Promise((resolve, reject) => {
         const deleteImagesCommand = 'rm ./images/*.h264'
         exec(deleteImagesCommand, (error, stdout, stderr) => {
-            if (error) {
+            // Ignoramos el error si simplemente no hay archivos .h264 que borrar
+            if (error && error.code !== 1) {
                 console.log('Error al eliminar las fotografías', error);
                 return reject(error)
             }
