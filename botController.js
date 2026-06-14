@@ -8,7 +8,7 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
 
 export async function sendMessage(message, imagePath) {
     try {
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo`
     
         if (!fs.existsSync(imagePath)) {
             console.error('El archivo no se encuentra en la ruta especificada');
@@ -22,7 +22,7 @@ export async function sendMessage(message, imagePath) {
         const form = new FormData();
         form.append('chat_id', TELEGRAM_CHAT_ID);
         form.append('caption', message);
-        form.append('photo', imageStream)
+        form.append('video', imageStream)
 
         const response = await fetch(url, {
             method: 'POST',
