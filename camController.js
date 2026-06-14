@@ -2,16 +2,12 @@ import { exec } from 'child_process'
 
 const width = 1920
 const height = 1080
-//const width = 960
-//const height = 542
 
 export const takeImage = (imageData) => {
     //retornamos la imagen si la promesa se resuelve
     return new Promise((resolve, reject) => {
-        //const imagePath = `./images/img${imageData}.jpg`
         const imagePath = `./images/img${imageData}.h264`
         //comando para sacar la fotografía
-        //const takeImageCommand = `libcamera-still -o ${imagePath} --width ${width} --height ${height} --nopreview --immediate`
         const takeImageCommand = `libcamera-vid -o ${imagePath} --width ${width} --height ${height} --timeout 15000 --nopreview`
         //ejecutamos el comando
         exec(takeImageCommand, (error, stdout, stderr) => {
@@ -55,3 +51,4 @@ export const deleteImages = () => {
     })
     
 }
+
