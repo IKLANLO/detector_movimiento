@@ -6,7 +6,7 @@ import { spawn } from 'child_process'
 import { startStream } from './streamController.js'
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID_PRUEBA
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
 
 export async function sendMessage(message, imagePath) {
     try {
@@ -29,7 +29,7 @@ export async function sendMessage(message, imagePath) {
         const response = await fetch(url, {
             method: 'POST',
             body: form,
-            headers: form.headers
+            headers: form.getHeaders()
         })
 
         const data = await response.json()
