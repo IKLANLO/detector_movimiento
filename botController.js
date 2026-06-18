@@ -86,8 +86,20 @@ export async function startLiveVideo(offset) {
                     const text = update.message.text
                     //aseguramos que sólo los usuarios con id válido puedan ejecutar el comando
                     if (chatId == TELEGRAM_CHAT_ID && text === '/vervideo') {
-                        console.log('START LIVE VIDEO');
-                        await startStream()
+                        console.log('SOLICITUD DE VIDEO RECIBIDA');
+                        try {
+                            // Consultamos al servidor de streaming local para obtener la URL de ngrok
+                            const response = await fetch('http://localhost:3000/info');
+                            if (response.ok) {
+                                const data = await response.json();
+                                await startLiveVideoMessage(`🎥 *Stream en vivo activo*\n\nPara ver en VLC usa el siguiente enlace:\n${data.url}`);
+                            } else {
+                                await startLiveVideoMessage('⚠️ El servidor de streaming no está respondiendo. Asegúrate de que esté encendido.');
+                            }
+                        } catch (error) {
+                            console.error('Error al obtener info del stream:', error);
+                            await startLiveVideoMessage('❌ Error: El servidor de streaming parece estar apagado.');
+                        }
                     }
                 }
             }
