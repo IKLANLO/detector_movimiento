@@ -1,57 +1,49 @@
 import { exec } from 'child_process'
 
-const width = 1920
-const height = 1080
-//const width = 960
-//const height = 542
+const width = 1280
+const height = 720
 
 export const takeImage = (imageData) => {
-    //retornamos la imagen si la promesa se resuelve
     return new Promise((resolve, reject) => {
-        //const imagePath = `./images/img${imageData}.jpg`
-        const imagePath = `./images/img${imageData}.h264`
-        //comando para sacar la fotografía
-        //const takeImageCommand = `libcamera-still -o ${imagePath} --width ${width} --height ${height} --nopreview --immediate`
-        const takeImageCommand = `libcamera-vid -o ${imagePath} --width ${width} --height ${height} --timeout 15000 --nopreview`
-        //ejecutamos el comando
-        exec(takeImageCommand, (error, stdout, stderr) => {
+        const imagePath = "/home/iklanlo/proyectos/detector_movimiento/images/vid" + imageData + ".h264";
+        // --inline-headers y --flush para que el archivo se escriba rápido
+        // --tuning-file para asegurar que no pierda tiempo calibrando cada vez
+        const takeVideoCommand = "libcamera-vid --frames 125 -o " + imagePath + " --width " + width + " --height " + height + " --nopreview --inline --flush --tuning-file /usr/share/libcamera/ipa/rpi/vc4/imx708_noir.json";
+        exec(takeVideoCommand, (error, stdout, stderr) => {
             if (error) {
-                console.log('Error al sacar la fotografía', error);
-                return reject(error)
+                console.log('Error al grabar el vídeo', error);
+                return reject(error);
             }
-            
-            resolve(imagePath)
-        })
-    })
+            resolve(imagePath);
+        });
+    });
 }
 
 export const convertImage = (imageData) => {
-    //convertimos las imágenes guardadas a MP4 para hacerlas compatibles con Telegram
     return new Promise((resolve, reject) => {
-        const convertImageCommand = `MP4Box -add './images/img'${imageData}'.h264' './images/img'${imageData}'.mp4'`
-        exec(convertImageCommand, (error, stdout, stderr) => {
+        const input = "/home/iklanlo/proyectos/detector_movimiento/images/vid" + imageData + ".h264";
+        const output = "/home/iklanlo/proyectos/detector_movimiento/images/vid" + imageData + ".mp4";
+        // Usamos ffmpeg para encapsular en mp4 de forma más directa y rápida que MP4Box en algunos casos
+        const convertCommand = "ffmpeg -i " + input + " -c copy -y " + output;
+        exec(convertCommand, (error, stdout, stderr) => {
             if (error) {
-                console.log('Error al convertir la fotografía', error);
-                return reject(error)
+                console.log('Error al convertir el vídeo', error);
+                return reject(error);
             }
-            
-            resolve(`./images/img${imageData}.mp4`)
-        })
-    })
+            resolve(output);
+        });
+    });
 }
 
 export const deleteImages = () => {
-    //eliminamos los archivos sin convertir a MP4 antes de finalizar
     return new Promise((resolve, reject) => {
-        const deleteImagesCommand = 'rm ./images/*.h264'
-        exec(deleteImagesCommand, (error, stdout, stderr) => {
+        const deleteCommand = 'rm /home/iklanlo/proyectos/detector_movimiento/images/vid*.h264 /home/iklanlo/proyectos/detector_movimiento/images/vid*.mp4'
+        exec(deleteCommand, (error, stdout, stderr) => {
             if (error) {
-                console.log('Error al eliminar las fotografías', error);
+                console.log('Error al limpiar archivos', error);
                 return reject(error)
             }
-            
             resolve()
         })
-    })
-    
+    });
 }
