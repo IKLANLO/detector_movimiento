@@ -1,61 +1,81 @@
 import 'dotenv/config'
 import { Gpio } from 'onoff';
-import { takeImage, convertImage, deleteImages } from './camController.js';
-import { sendMessage } from './botController.js'
+import { exec } from 'child_process'
+import fs from 'fs'
+import { takeImage, convertImage } from './camController.js';
+import { sendMessage, startLiveVideo } from './botController.js'
 import { createLog, writeLog } from './logController.js';
 
 const PIRPIN = process.env.PIRPIN
-const pir = new Gpio(PIRPIN, 'in', 'rising')
-const movementLogPath = `./logs/log${new Date().valueOf()}.txt`
-let finishedImg = true
+const LOCK_FILE = '/tmp/camera_busy.lock'
 
-// Función para obtener la fecha y hora actuales
+const pir = new Gpio(PIRPIN, 'in', 'rising', { debounceTimeout: 100 });
+const movementLogPath = "/home/iklanlo/proyectos/detector_movimiento/logs/log" + new Date().valueOf() + ".txt";
+let isProcessing = false;
+
 function getFormattedDate() {
     const now = new Date()
-    const date = now.toLocaleDateString()
-    const time = now.toLocaleTimeString()
-    return `${date} ${time}`
+    return now.toLocaleDateString() + " " + now.toLocaleTimeString();
 }
 
-//creamos el archivo del log de respaldo de movimientos
 createLog(movementLogPath)
+console.log('Sistema de detección PIR iniciado (Modo Vídeo)...');
 
-//cada vez que el PIR detecte movimiento se saca una fotografía, se envía por Telegram
-//junto a una notificación, y se guarda en el log
 pir.watch(async (err, value) => {
     if (err) {
         console.error('error detectando movimiento', err)
         return 
     }
+
+    if (fs.existsSync(LOCK_FILE)) return;
     
-    if (value === 1 && finishedImg){
+    if (value === 1 && !isProcessing) {
+        isProcessing = true;
         const movementDate = getFormattedDate();
+        console.log("[" + movementDate + "] Movimiento detectado, grabando vídeo...");
         
         try {
-            finishedImg = false
             const newDate = new Date().valueOf()
-            const image = await takeImage(newDate)
-            const convertedImage = await convertImage(newDate)
-            console.log('Imagen guardada en:', convertedImage)
-            await sendMessage(`[${movementDate}] movimiento detectado`, convertedImage)
+            // 1. Grabamos el vídeo (h264)
+            const h264File = await takeImage(newDate)
+            
+            // 2. Convertimos a MP4
+            console.log("Convirtiendo a MP4...");
+            const mp4File = await convertImage(newDate)
+            
+            // 3. Enviamos por Telegram
+            await sendMessage("[" + movementDate + "] movimiento detectado", mp4File)
             writeLog(movementLogPath, movementDate)
-            finishedImg = true
+            
+            console.log("Vídeo enviado. Esperando estabilización...");
+            
+            // 4. Cooldown: Esperamos 5 segundos antes de volver a vigilar
+            // Esto es CRUCIAL para evitar el bucle de falsos positivos
+            setTimeout(() => {
+                isProcessing = false;
+                console.log('Sensor rearmado y listo');
+            }, 5000); 
+
         } catch (error) {
-            console.error('Error en el proceso de toma de imagen:', error)
-            finishedImg = true
+            console.error('Error en el proceso de vídeo:', error)
+            isProcessing = false;
         }
     }
-})
+});
+
+export const stopPir = async () => {
+    await pir.unwatch()
+    await pir.unexport()
+    console.log('pir.watch parado')
+}
+
+startLiveVideo(0)
 
 process.on('SIGINT', async ()=> {
     try {
-        await deleteImages()
-        //liberamos los recursos utilizados al terminar el programa
         pir.unexport()
         process.exit()
     } catch (error) {
         console.error('Error en la limpieza de recursos', error)
     }
 })
-
-
