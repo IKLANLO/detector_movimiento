@@ -3,12 +3,13 @@ import { Gpio } from 'onoff';
 import fs from 'fs'
 import { takeImage, convertImage } from './camController.js';
 import { sendMessage, sendTextMessage, startBotListener, sistemaActivo } from './botController.js'
-import { createLog, writeLog } from './logController.js';
+import { createLog, writeLog, cleanOldLogs } from './logController.js';
 
 const PIRPIN = process.env.PIRPIN
 const LOCK_FILE = '/tmp/camera_busy.lock'
 
-const movementLogPath = "/home/iklanlo/proyectos/detector_movimiento/logs/log" + new Date().valueOf() + ".txt";
+const logsDirectory = "/home/iklanlo/proyectos/detector_movimiento/logs";
+const movementLogPath = logsDirectory + "/log" + new Date().valueOf() + ".txt";
 let isProcessing = false;
 let pir = null;
 let pirActivo = false;
@@ -17,6 +18,9 @@ function getFormattedDate() {
     const now = new Date()
     return now.toLocaleDateString() + " " + now.toLocaleTimeString();
 }
+
+// Limpiar logs de días anteriores al arrancar
+cleanOldLogs(logsDirectory);
 
 createLog(movementLogPath)
 
@@ -63,9 +67,18 @@ export function activarPir() {
                 await sendMessage("[" + movementDate + "] movimiento detectado", mp4File)
                 writeLog(movementLogPath, movementDate)
                 
-                console.log("Vídeo enviado. Esperando estabilización...");
+                console.log("Vídeo enviado. Limpiando archivos locales...");
                 
-                // 4. Cooldown: Esperamos 5 segundos antes de volver a vigilar
+                // 4. Limpieza de archivos de vídeo locales para no ocupar espacio
+                try {
+                    if (fs.existsSync(h264File)) fs.unlinkSync(h264File);
+                    if (fs.existsSync(mp4File)) fs.unlinkSync(mp4File);
+                    console.log("Archivos temporales de vídeo eliminados correctamente.");
+                } catch (cleanError) {
+                    console.error("Error al eliminar archivos temporales:", cleanError);
+                }
+
+                // 5. Cooldown: Esperamos 5 segundos antes de volver a vigilar
                 setTimeout(() => {
                     isProcessing = false;
                     console.log('Sensor rearmado y listo');
