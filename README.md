@@ -1,8 +1,8 @@
 # 🎥 Detector de Movimiento + Streaming en Vivo · Raspberry Pi
 
-Sistema de vigilancia autónomo basado en **Raspberry Pi 3B** con dos modos de supervisión:
-- **Detección de movimiento**: el sensor PIR dispara la cámara, captura una fotografía y la envía al bot de **Telegram** con fecha y hora.
-- **Streaming en vivo**: servidor HTTP que retransmite vídeo H264 en tiempo real, accesible desde cualquier lugar del mundo mediante **ngrok** (sin abrir puertos del router).
+Sistema de vigilancia autónomo basado en **Raspberry Pi** con inicio unificado y dos modos integrados coordinados mediante **Telegram**:
+- **Detección de movimiento**: el sensor PIR dispara la cámara, graba un clip de vídeo, lo convierte a MP4 y lo envía al bot de **Telegram** con la fecha y hora.
+- **Streaming en vivo**: servidor HTTP que retransmite vídeo en tiempo real, accesible desde cualquier lugar del mundo mediante **ngrok** (sin abrir puertos del router) con control del stream.
 
 ---
 
@@ -11,13 +11,11 @@ Sistema de vigilancia autónomo basado en **Raspberry Pi 3B** con dos modos de s
 - [Descripción general](#-descripción-general)
 - [Hardware necesario](#-hardware-necesario)
 - [Arquitectura del proyecto](#-arquitectura-del-proyecto)
-- [Flujo de funcionamiento](#-flujo-de-funcionamiento)
+- [Comandos de Telegram](#-comandos-de-telegram)
 - [Instalación y configuración](#-instalación-y-configuración)
 - [Variables de entorno](#-variables-de-entorno)
 - [Cómo iniciar el sistema](#-cómo-iniciar-el-sistema)
-  - [Detector de movimiento](#-detector-de-movimiento-pircontrollerjs)
-  - [Servidor de streaming](#-servidor-de-streaming-serverjs)
-  - [Ejecución automática al arrancar](#-ejecución-automática-al-arrancar-la-raspberry-pi)
+- [Ejecución automática al arrancar (Demonio)](#-ejecución-automática-al-arrancar-demonio)
 - [Logs de actividad](#-logs-de-actividad)
 - [Estructura de archivos](#-estructura-de-archivos)
 - [Dependencias](#-dependencias)
@@ -26,18 +24,17 @@ Sistema de vigilancia autónomo basado en **Raspberry Pi 3B** con dos modos de s
 
 ## 📖 Descripción general
 
-Este proyecto convierte una Raspberry Pi 3B en un sistema de seguridad autónomo con dos funcionalidades independientes que pueden ejecutarse simultáneamente:
+Este proyecto unifica la detección PIR y el streaming en vivo en un único punto de entrada:
 
-### 🔴 Detección de movimiento (pirController.js)
-1. El sensor PIR detecta movimiento y activa la cámara.
-2. Captura una fotografía en alta resolución (1920×1080).
-3. Envía la imagen al bot de Telegram con la fecha y hora exacta.
-4. Registra el evento en un archivo de log local.
+### 🔴 Detección de movimiento
+1. Por defecto, al arrancar, el sensor PIR está inactivo para evitar falsos positivos y liberar recursos de cámara.
+2. Al activarlo mediante Telegram (`/activar`), el sensor vigila el entorno.
+3. Si detecta movimiento, graba un clip de vídeo H264 de 5 segundos, lo encapsula en MP4, lo envía a Telegram y rearma el sensor tras un cooldown de seguridad de 5 segundos.
 
-### 📡 Streaming en vivo (server.js)
-1. Arranca un servidor Express en el puerto 3000.
-2. Usa `libcamera-vid` para emitir vídeo H264 a 1280×720 @ 50 fps.
-3. Lanza **ngrok** y expone la URL pública por consola, accesible desde cualquier red sin configurar el router.
+### 📡 Streaming en vivo
+1. El servidor Express corre en segundo plano en el puerto 3000 de forma local.
+2. Utiliza **ngrok** para tunelizar la conexión de forma segura hacia el exterior.
+3. Al solicitar el vídeo en vivo desde Telegram (`/vervideo`), se responde con la URL pública para reproducir en cualquier software compatible (como VLC).
 
 ---
 
@@ -45,83 +42,52 @@ Este proyecto convierte una Raspberry Pi 3B en un sistema de seguridad autónomo
 
 | Componente | Descripción |
 |---|---|
-| **Raspberry Pi 3B** | Placa principal donde se ejecuta el sistema |
-| **Sensor PIR** | Detector de movimiento por infrarrojos pasivos (ej. HC-SR501) |
-| **Cámara Raspberry Pi** | Módulo de cámara oficial (Camera Module v2 o compatible) |
-| **Cables dupont** | Para conectar el sensor PIR a los pines GPIO |
-| **Fuente de alimentación** | 5V / 2.5A mínimo para la Raspberry Pi |
+| **Raspberry Pi** | Placa principal (ej. Raspberry Pi 3B o superior) |
+| **Sensor PIR** | Detector de movimiento infrarrojo pasivo (ej. HC-SR501) |
+| **Cámara Raspberry Pi** | Módulo de cámara compatible con comandos `libcamera` |
+| **Cables Dupont** | Conectores hembra-hembra para el cableado GPIO |
 
 ### Conexión del sensor PIR a los GPIO
 
 ```
-Sensor PIR   →   Raspberry Pi 3B
+Sensor PIR   →   Raspberry Pi
 -----------       ----------------
 VCC (5V)    →   Pin 2  (5V)
 GND         →   Pin 6  (GND)
 OUT (señal) →   GPIO configurado en PIRPIN (.env)
 ```
 
-> **Nota:** El pin GPIO de señal se define en la variable de entorno `PIRPIN`. Por defecto suele usarse el GPIO 17 (Pin físico 11).
-
 ---
 
 ## 🏗️ Arquitectura del proyecto
 
-El proyecto se compone de **dos sistemas independientes** que comparten la cámara de la Raspberry Pi:
-
 ```
 detector_movimiento/
 │
-├── 📸 SISTEMA DE DETECCIÓN DE MOVIMIENTO
-│   ├── pirController.js    ← Punto de entrada. Escucha el sensor PIR y coordina el resto
-│   ├── camController.js    ← Captura fotografías con libcamera-still (1920×1080)
-│   ├── botController.js    ← Envía imagen + alerta a Telegram via API
-│   └── logController.js    ← Crea y escribe el log de eventos con timestamp
-│
-├── 📡 SERVIDOR DE STREAMING EN VIVO
-│   └── server.js           ← Servidor Express + libcamera-vid + ngrok (1280×720 @ 50fps)
-│
-├── package.json            ← Configuración del proyecto y dependencias
-├── .env                    ← Variables de entorno (no incluido en el repositorio)
-├── images/                 ← Fotografías capturadas por el detector
-└── logs/                   ← Logs de actividad del detector
+├── index.js                ← Punto de entrada unificado. Lanza server.js y pirController.js
+├── pirController.js        ← Controla el sensor PIR. Escucha callbacks del bot
+├── botController.js        ← Listener de comandos del Bot de Telegram (Polling largo)
+├── camController.js        ← Graba vídeo y limpia archivos temporales (libcamera + ffmpeg)
+├── logController.js        ← Gestiona los registros locales de actividad
+├── package.json            ← Configuración del proyecto, scripts y dependencias
+├── .env                    ← Variables de entorno (Token, Chat ID, PIN)
+├── server/
+│   └── server.js           ← Servidor Express local + Tunelización ngrok
+├── images/                 ← Vídeos grabados temporales
+└── logs/                   ← Historial de detecciones
 ```
 
 ---
 
-## 🔄 Flujo de funcionamiento
+## 💬 Comandos de Telegram
 
-### Detector de movimiento
+El sistema se controla de forma remota enviando comandos al Bot de Telegram desde el chat autorizado:
 
-```
-Sensor PIR detecta movimiento
-          │
-          ▼
-  pirController.js recibe el evento (valor = 1)
-          │
-          ├──► camController.js
-          │       └── Ejecuta `libcamera-still` → guarda imagen en ./images/
-          │
-          ├──► botController.js
-          │       └── Envía imagen + mensaje con fecha/hora a Telegram via API
-          │
-          └──► logController.js
-                  └── Añade entrada con timestamp al archivo de log activo
-```
-
-### Servidor de streaming
-
-```
-server.js arranca
-          │
-          ├── Obtiene IP pública (curl ifconfig.me)
-          │
-          ├── Levanta Express en puerto 3000
-          │       └── GET / → libcamera-vid (H264) → stream HTTP
-          │
-          └── Lanza ngrok → obtiene URL pública → imprime en consola
-                  └── Acceso remoto sin configurar router
-```
+* `/activar` — Enciende la vigilancia PIR. El sensor comenzará a enviar alertas y vídeos ante cualquier presencia.
+* `/desactivar` — Apaga la vigilancia PIR. Ideal cuando estés en casa para evitar alertas innecesarias.
+* `/estado` — Devuelve si la detección está actualmente `Activa` o `Inactiva`.
+* `/vervideo` — Devuelve el enlace público de **ngrok** para abrir el streaming en tiempo real en reproductores como VLC.
+* `/ayuda` — Muestra el listado de comandos disponibles.
 
 ---
 
@@ -129,234 +95,151 @@ server.js arranca
 
 ### 1. Prerrequisitos en la Raspberry Pi
 
-Asegúrate de tener instalado en la Raspberry Pi:
-
-- **Node.js v18+**
+- **Node.js v18+** y **npm** instalados.
+- **libcamera** y **ffmpeg** instalados en el sistema operativo:
   ```bash
-  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  sudo apt update
+  sudo apt install -y libcamera-apps ffmpeg
   ```
-
-- **libcamera** (para la captura de imágenes, normalmente preinstalado en Raspberry Pi OS)
+- **ngrok** instalado y autenticado con tu token personal (requiere registro gratuito en ngrok.com):
   ```bash
-  sudo apt install -y libcamera-apps
-  ```
-
-- **Habilitar la cámara** (si no está ya habilitada):
-  ```bash
-  sudo raspi-config
-  # Interfacing Options → Camera → Enable
-  ```
-
-- **ngrok** (para el streaming remoto sin abrir puertos)
-  ```bash
-  # Descarga e instala ngrok desde https://ngrok.com/download
-  # O usando snap:
-  sudo snap install ngrok
-  # Autentica tu cuenta (necesitas registro gratuito en ngrok.com)
   ngrok config add-authtoken <TU_AUTHTOKEN>
   ```
 
-### 2. Clonar el repositorio
+### 2. Preparar el proyecto
 
-```bash
-git clone <url-del-repositorio>
-cd detector_movimiento
-```
-
-### 3. Instalar dependencias
-
-```bash
-npm install
-```
-
-### 4. Crear directorios necesarios
-
-```bash
-mkdir -p images logs
-```
-
-### 5. Crear el bot de Telegram
-
-1. Abre Telegram y busca **@BotFather**.
-2. Ejecuta `/newbot` y sigue las instrucciones para crear un nuevo bot.
-3. Copia el **token** que te proporciona BotFather.
-4. Inicia una conversación con tu bot y obtén tu **Chat ID** usando:
+1. Clona el repositorio e instala las dependencias:
+   ```bash
+   npm install
    ```
-   https://api.telegram.org/bot<TU_TOKEN>/getUpdates
+2. Crea las carpetas locales para almacenamiento:
+   ```bash
+   mkdir -p images logs
    ```
-   El `chat.id` del primer mensaje es tu Chat ID.
 
 ---
 
 ## 🔐 Variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto con el siguiente contenido:
+Crea un archivo `.env` en la raíz del proyecto:
 
 ```env
-# Pin GPIO donde está conectada la señal OUT del sensor PIR
-PIRPIN=XXX
+# Pin GPIO físico donde está conectada la señal OUT del PIR (ej: GPIO 17)
+PIRPIN=17
 
-# Token del bot de Telegram (proporcionado por BotFather)
-TELEGRAM_BOT_TOKEN=XXXXXX
+# Token privado de Telegram (@BotFather)
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ
 
-# ID del chat de Telegram al que se enviarán las alertas
-TELEGRAM_CHAT_ID=XXXXX
+# Tu ID de chat de Telegram (para autorizar sólo tus comandos)
+TELEGRAM_CHAT_ID_PRUEBA=987654321
 ```
-
-> ⚠️ **Importante:** El archivo `.env` contiene credenciales sensibles. Nunca lo subas al repositorio. Está incluido en `.gitignore`.
 
 ---
 
 ## 🚀 Cómo iniciar el sistema
 
-Los dos sistemas se arrancan de forma independiente, cada uno en su propia terminal.
-
----
-
-### 🔴 Detector de movimiento (pirController.js)
+Para iniciar manualmente todo el ecosistema (Servidor web + Bot de Telegram + PIR) ejecuta:
 
 ```bash
 npm start
 ```
 
-Esto ejecuta internamente:
-```bash
-sudo node pirController.js
-```
+Este comando lanzará `index.js`, arrancando de forma coordinada el servidor local y el gestor del PIR con permisos de superusuario (`sudo`).
 
-> Se requiere `sudo` para acceder a los pines GPIO de la Raspberry Pi.
-
-Para **parar**, pulsa `Ctrl + C`. El programa liberará automáticamente los recursos GPIO antes de cerrarse.
+*Al iniciar, recibirás una notificación en Telegram indicando que el sistema está en línea y esperando instrucciones.*
 
 ---
 
-### 📡 Servidor de streaming (server.js)
+## 🔁 Ejecución automática al arrancar (Demonio)
 
-En una **segunda terminal**, ejecuta:
+Para que el detector y el servidor arranquen solos al encender la Raspberry Pi sin necesidad de tener una terminal abierta, configuraremos un servicio con **systemd**.
 
-```bash
-node server.js
-```
+### 1. Crear el archivo del servicio
 
-Cuando arranque correctamente verás en consola algo como:
-
-```
-streaming en vivo disponible en https://xxxx-xxxx.ngrok-free.app
-```
-
-Abre esa URL en cualquier navegador o reproductor compatible con H264 (como **VLC**) para ver el streaming en directo.
-
-> ⚠️ La URL de ngrok cambia cada vez que reinicias el servidor (en el plan gratuito). Para una URL fija considera el plan de pago de ngrok.
-
-Para **parar**, pulsa `Ctrl + C` en esa terminal.
-
----
-
-### 🔁 Ejecución automática al arrancar la Raspberry Pi
-
-Para que el sistema arranque solo cada vez que se enciende la Raspberry Pi, configura un servicio con **systemd**:
-
-#### 1. Crea el archivo de servicio
+Ejecuta el siguiente comando para abrir el editor:
 
 ```bash
-sudo nano /etc/systemd/system/detector_movimiento.service
+sudo nano /etc/systemd/system/detector-movimiento.service
 ```
 
-#### 2. Pega el siguiente contenido (ajusta las rutas si es necesario)
+### 2. Añadir la configuración del servicio
+
+Copia y pega las siguientes líneas (asegúrate de ajustar `/ruta_del_proyecto/detector_movimiento` si tu ruta es distinta):
 
 ```ini
 [Unit]
-Description=Detector de Movimiento con Telegram
+Description=Servicio Detector de Movimiento y Streaming
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/node /home/pi/detector_movimiento/pirController.js
-WorkingDirectory=/home/pi/detector_movimiento
-Restart=always
-RestartSec=5
+Type=simple
 User=root
-EnvironmentFile=/home/pi/detector_movimiento/.env
+WorkingDirectory=/ruta_del_proyecto/detector_movimiento
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=PATH=/usr/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-#### 3. Activa e inicia el servicio
+*Guarda y cierra con `Ctrl+O`, `Enter` y luego `Ctrl+X`.*
+
+### 3. Registrar y activar el demonio
+
+Ejecuta las siguientes órdenes para registrar el demonio y habilitar su ejecución automática en cada arranque de la placa:
 
 ```bash
+# Recargar systemd para que reconozca el nuevo servicio
 sudo systemctl daemon-reload
-sudo systemctl enable detector_movimiento
-sudo systemctl start detector_movimiento
+
+# Habilitar para que inicie en el arranque del sistema
+sudo systemctl enable detector-movimiento.service
+
+# Arrancar el servicio inmediatamente
+sudo systemctl start detector-movimiento.service
 ```
 
-#### 4. Comprueba el estado del servicio
+### 4. Comandos de utilidad para el demonio
 
-```bash
-sudo systemctl status detector_movimiento
-```
-
-#### 5. Ver los logs del servicio en tiempo real
-
-```bash
-sudo journalctl -u detector_movimiento -f
-```
+* **Ver estado actual del servicio**:
+  ```bash
+  sudo systemctl status detector-movimiento.service
+  ```
+* **Ver los registros/logs de consola en vivo**:
+  ```bash
+  sudo journalctl -u detector-movimiento.service -f
+  ```
+* **Reiniciar el demonio**:
+  ```bash
+  sudo systemctl restart detector-movimiento.service
+  ```
+* **Parar el demonio**:
+  ```bash
+  sudo systemctl stop detector-movimiento.service
+  ```
 
 ---
 
 ## 📄 Logs de actividad
 
-Cada vez que se inicia el programa, se crea automáticamente un nuevo archivo de log en el directorio `./logs/` con un nombre basado en el timestamp de inicio:
+Las alertas grabadas de vídeo se almacenan temporalmente en `./images/` en formato `.mp4`.
 
+Cada inicio del bot genera un nuevo fichero de registros históricos dentro de `./logs/` con formato:
+`logs/log<timestamp_inicio>.txt`
+
+Donde se añade una nueva línea en cada detección:
 ```
-logs/log1718360000000.txt
+[24/6/2026 19:15:30] movimiento detectado
 ```
-
-Cada evento de movimiento queda registrado con su fecha y hora:
-
-```
-[14/6/2026 13:45:02] movimiento detectado
-[14/6/2026 13:52:17] movimiento detectado
-[14/6/2026 14:03:44] movimiento detectado
-```
-
-Las imágenes capturadas se guardan en `./images/` con un nombre basado en el timestamp del momento de captura:
-
-```
-images/img1718360102345.jpg
-```
-
----
-
-## 📁 Estructura de archivos
-
-| Archivo | Descripción |
-|---|---|
-| [`pirController.js`](./pirController.js) | Módulo principal del detector. Inicializa el sensor PIR en el pin GPIO definido, escucha el flanco de subida (`rising`) y coordina la captura, envío y registro de cada detección. |
-| [`camController.js`](./camController.js) | Controla la cámara mediante `libcamera-still`. Captura imágenes a resolución Full HD (1920×1080) y las guarda en `./images/`. |
-| [`botController.js`](./botController.js) | Envía la fotografía capturada junto a un mensaje de alerta al chat de Telegram configurado, usando la API oficial (`sendPhoto`). |
-| [`logController.js`](./logController.js) | Gestiona la creación del archivo de log al arrancar y la escritura de cada evento de movimiento con su timestamp. |
-| [`server.js`](./server.js) | Servidor de streaming en vivo. Levanta Express en el puerto 3000, emite vídeo H264 a 1280×720 @ 50fps con `libcamera-vid` y expone la URL pública mediante ngrok. |
 
 ---
 
 ## 📦 Dependencias
 
-| Paquete | Versión | Uso |
-|---|---|---|
-| [`dotenv`](https://www.npmjs.com/package/dotenv) | ^16.4.5 | Carga las variables de entorno desde el archivo `.env` |
-| [`onoff`](https://www.npmjs.com/package/onoff) | ^6.0.3 | Interfaz con los pines GPIO de la Raspberry Pi para leer el sensor PIR |
-| [`node-fetch`](https://www.npmjs.com/package/node-fetch) | ^3.3.2 | Realiza las peticiones HTTP a la API de Telegram |
-| [`form-data`](https://www.npmjs.com/package/form-data) | ^4.0.0 | Construye el formulario multipart para enviar la imagen a Telegram |
-| [`express`](https://www.npmjs.com/package/express) | ^4.x | Servidor HTTP para el streaming de vídeo en vivo |
-| [`fs`](https://www.npmjs.com/package/fs) | built-in | Gestión de archivos (logs e imágenes) |
-| `child_process` | built-in | Ejecución de procesos del sistema (`libcamera-vid`, `libcamera-still`, `ngrok`, `curl`) |
-
-> **Herramienta externa:** [`ngrok`](https://ngrok.com/) debe instalarse por separado en el sistema (no es un paquete npm). Ver sección de instalación.
-
----
-
-## 👤 Autor
-
-**Iker Landaberea**  
-Licencia ISC
+* `onoff` — Acceso a pines GPIO del procesador de la placa.
+* `node-fetch` / `form-data` — Integración HTTP con la API de Telegram.
+* `express` — Servidor web para servir el flujo de vídeo.
+* `dotenv` — Gestión limpia de configuraciones sensibles.
