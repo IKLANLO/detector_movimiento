@@ -101,19 +101,23 @@ export async function desactivarPir() {
 // ─────────────────────────────────────────────
 //  Punto de entrada: arrancar bot y esperar comandos
 // ─────────────────────────────────────────────
-console.log('🤖 Bot de Telegram iniciado. Esperando comandos /activar y /desactivar...');
-await sendTextMessage('🤖 Sistema iniciado. Usa /activar para comenzar la detección o /ayuda para ver los comandos.');
+async function main() {
+    console.log('🤖 Bot de Telegram iniciado. Esperando comandos /activar y /desactivar...');
+    await sendTextMessage('🤖 Sistema iniciado. Usa /activar para comenzar la detección o /ayuda para ver los comandos.');
 
-startBotListener(0,
-    // onActivar
-    () => {
-        activarPir();
-    },
-    // onDesactivar
-    async () => {
-        await desactivarPir();
-    }
-);
+    startBotListener(0,
+        // onActivar
+        () => {
+            activarPir();
+        },
+        // onDesactivar
+        async () => {
+            await desactivarPir();
+        }
+    );
+}
+
+main().catch(err => console.error('Error al iniciar pirController:', err));
 
 process.on('SIGINT', async () => {
     try {
