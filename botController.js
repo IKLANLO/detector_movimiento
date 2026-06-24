@@ -4,7 +4,7 @@ import fs from 'fs'
 import FormData from 'form-data'
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID_PRUEBA
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
 
 // Estado del sistema (exportado para que pirController pueda leerlo)
 export let sistemaActivo = false;
