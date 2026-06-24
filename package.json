@@ -4,7 +4,7 @@
   "description": "",
   "main": "pirController.js",
   "scripts": {
-    "start": "sudo node pirController.js"
+    "start": "sudo node index.js"
   },
   "type": "module",
   "author": "Iker Landaberea",
