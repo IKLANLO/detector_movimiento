@@ -8,6 +8,14 @@ import { createLog, writeLog, cleanOldLogs } from './logController.js';
 const PIRPIN = process.env.PIRPIN
 const LOCK_FILE = '/tmp/camera_busy.lock'
 
+// Tiempo de espera (ms) antes de confirmar la detección releyendo el pin.
+// El movimiento real mantiene el PIR en HIGH varios segundos.
+// El ruido ambiental (sol, viento, insectos) genera pulsos muy breves que
+// ya habrán bajado a 0 cuando hagamos la segunda lectura.
+// Ajusta este valor si sigues teniendo falsos positivos (sube) o
+// si se pierden detecciones rápidas (baja).
+const CONFIRMATION_DELAY_MS = 600;
+
 const logsDirectory = "/home/iklanlo/proyectos/detector_movimiento/logs";
 const movementLogPath = logsDirectory + "/log" + new Date().valueOf() + ".txt";
 let isCooldown = false;   // Evita re-disparos del PIR por el mismo evento (duración corta)
@@ -50,10 +58,25 @@ export function activarPir() {
         if (!pirActivo) return;
 
         if (fs.existsSync(LOCK_FILE)) return;
-        
+
         if (value === 1 && !isCooldown && !isRecording) {
+            // ── Confirmación anti-falsos-positivos ──────────────────────────
+            // Esperamos CONFIRMATION_DELAY_MS y reeleemos el pin.
+            // Ruido ambiental (sol, viento, insectos): pulso muy corto → pin = 0 → descartado.
+            // Movimiento real: el PIR permanece en HIGH varios segundos → pin = 1 → grabamos.
+            await new Promise(resolve => setTimeout(resolve, CONFIRMATION_DELAY_MS));
+
+            // Re-comprobar que el sistema sigue activo y el pin sigue en HIGH
+            if (!pirActivo) return;
+            const confirmValue = await pir.read().catch(() => 0);
+            if (confirmValue !== 1) {
+                console.log('[PIR] Pulso descartado (falso positivo): el pin bajó durante la confirmación.');
+                return;
+            }
+            // ────────────────────────────────────────────────────────────────
+
             const movementDate = getFormattedDate();
-            console.log("[" + movementDate + "] Movimiento detectado, grabando vídeo...");
+            console.log("[" + movementDate + "] Movimiento confirmado, grabando vídeo...");
 
             // ── Cooldown corto: evita re-disparos del mismo evento PIR ──
             // Se activa inmediatamente y es independiente de la grabación.
