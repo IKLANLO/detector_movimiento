@@ -10,7 +10,8 @@ const LOCK_FILE = '/tmp/camera_busy.lock'
 
 const logsDirectory = "/home/iklanlo/proyectos/detector_movimiento/logs";
 const movementLogPath = logsDirectory + "/log" + new Date().valueOf() + ".txt";
-let isProcessing = false;
+let isCooldown = false;   // Evita re-disparos del PIR por el mismo evento (duración corta)
+let isRecording = false;  // Evita grabar dos vídeos a la vez (dura lo que tarde la grabación)
 let pir = null;
 let pirActivo = false;
 
@@ -33,9 +34,10 @@ export function activarPir() {
         return;
     }
     pirActivo = true;
-    isProcessing = false;
+    isCooldown = false;
+    isRecording = false;
 
-    pir = new Gpio(PIRPIN, 'in', 'rising', { debounceTimeout: 100 });
+    pir = new Gpio(PIRPIN, 'in', 'rising', { debounceTimeout: 800 });
     console.log('[PIR] Sistema de detección PIR iniciado (Modo Vídeo)...');
 
     pir.watch(async (err, value) => {
@@ -49,45 +51,57 @@ export function activarPir() {
 
         if (fs.existsSync(LOCK_FILE)) return;
         
-        if (value === 1 && !isProcessing) {
-            isProcessing = true;
+        if (value === 1 && !isCooldown && !isRecording) {
             const movementDate = getFormattedDate();
             console.log("[" + movementDate + "] Movimiento detectado, grabando vídeo...");
-            
-            try {
-                const newDate = new Date().valueOf()
-                // 1. Grabamos el vídeo (h264)
-                const h264File = await takeImage(newDate)
-                
-                // 2. Convertimos a MP4
-                console.log("Convirtiendo a MP4...");
-                const mp4File = await convertImage(newDate)
-                
-                // 3. Enviamos por Telegram
-                await sendMessage("[" + movementDate + "] movimiento detectado", mp4File)
-                writeLog(movementLogPath, movementDate)
-                
-                console.log("Vídeo enviado. Limpiando archivos locales...");
-                
-                // 4. Limpieza de archivos de vídeo locales para no ocupar espacio
+
+            // ── Cooldown corto: evita re-disparos del mismo evento PIR ──
+            // Se activa inmediatamente y es independiente de la grabación.
+            isCooldown = true;
+            setTimeout(() => {
+                isCooldown = false;
+                console.log('[PIR] Sensor rearmado para nueva detección.');
+            }, 10000); // 10 segundos es suficiente para que el PIR baje a LOW
+
+            // ── Grabación: bloquea la cámara mientras dure el proceso ──
+            isRecording = true;
+            try { fs.writeFileSync(LOCK_FILE, '1'); } catch (_) {}
+
+            // Lanzamos la grabación de forma no bloqueante para el watcher
+            (async () => {
                 try {
-                    if (fs.existsSync(h264File)) fs.unlinkSync(h264File);
-                    if (fs.existsSync(mp4File)) fs.unlinkSync(mp4File);
-                    console.log("Archivos temporales de vídeo eliminados correctamente.");
-                } catch (cleanError) {
-                    console.error("Error al eliminar archivos temporales:", cleanError);
+                    const newDate = new Date().valueOf()
+                    // 1. Grabamos el vídeo (h264)
+                    const h264File = await takeImage(newDate)
+
+                    // 2. Convertimos a MP4
+                    console.log("Convirtiendo a MP4...");
+                    const mp4File = await convertImage(newDate)
+
+                    // 3. Enviamos por Telegram
+                    await sendMessage("[" + movementDate + "] movimiento detectado", mp4File)
+                    writeLog(movementLogPath, movementDate)
+
+                    console.log("Vídeo enviado. Limpiando archivos locales...");
+
+                    // 4. Limpieza de archivos de vídeo locales
+                    try {
+                        if (fs.existsSync(h264File)) fs.unlinkSync(h264File);
+                        if (fs.existsSync(mp4File)) fs.unlinkSync(mp4File);
+                        console.log("Archivos temporales de vídeo eliminados correctamente.");
+                    } catch (cleanError) {
+                        console.error("Error al eliminar archivos temporales:", cleanError);
+                    }
+
+                } catch (error) {
+                    console.error('Error en el proceso de vídeo:', error);
+                } finally {
+                    // Liberar la cámara siempre, tanto en éxito como en error
+                    try { if (fs.existsSync(LOCK_FILE)) fs.unlinkSync(LOCK_FILE); } catch (_) {}
+                    isRecording = false;
+                    console.log('[CAM] Cámara liberada.');
                 }
-
-                // 5. Cooldown: Esperamos 5 segundos antes de volver a vigilar
-                setTimeout(() => {
-                    isProcessing = false;
-                    console.log('Sensor rearmado y listo');
-                }, 5000); 
-
-            } catch (error) {
-                console.error('Error en el proceso de vídeo:', error)
-                isProcessing = false;
-            }
+            })();
         }
     });
 }
