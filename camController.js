@@ -8,7 +8,10 @@ export const takeImage = (imageData) => {
         const imagePath = "/home/iklanlo/proyectos/detector_movimiento/images/vid" + imageData + ".h264";
         // --inline-headers y --flush para que el archivo se escriba rápido
         // --tuning-file para asegurar que no pierda tiempo calibrando cada vez
-        const takeVideoCommand = "libcamera-vid --frames 125 -o " + imagePath + " --width " + width + " --height " + height + " --nopreview --inline --flush --tuning-file /usr/share/libcamera/ipa/rpi/vc4/imx708_noir.json";
+        // --framerate 25: 125 frames = 5 segundos exactos de vídeo
+        // -t 0: desactiva el timeout por tiempo (por defecto es 60s en libcamera),
+        //        así el proceso para exactamente al llegar a --frames y no antes ni después
+        const takeVideoCommand = "libcamera-vid --frames 125 --framerate 25 -t 0 -o " + imagePath + " --width " + width + " --height " + height + " --nopreview --inline --flush --tuning-file /usr/share/libcamera/ipa/rpi/vc4/imx708_noir.json";
         exec(takeVideoCommand, (error, stdout, stderr) => {
             if (error) {
                 console.log('Error al grabar el vídeo', error);
