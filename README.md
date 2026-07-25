@@ -129,10 +129,10 @@ Crea un archivo `.env` en la raíz del proyecto:
 PIRPIN=17
 
 # Token privado de Telegram (@BotFather)
-TELEGRAM_BOT_TOKEN=1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ
+TELEGRAM_BOT_TOKEN=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 # Tu ID de chat de Telegram (para autorizar sólo tus comandos)
-TELEGRAM_CHAT_ID_PRUEBA=987654321
+TELEGRAM_CHAT_ID_PRUEBA=XXXXXXXXXXXXXXX
 ```
 
 ---
