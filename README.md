@@ -29,7 +29,8 @@ Este proyecto unifica la detección PIR y el streaming en vivo en un único punt
 ### 🔴 Detección de movimiento
 1. Por defecto, al arrancar, el sensor PIR está inactivo para evitar falsos positivos y liberar recursos de cámara.
 2. Al activarlo mediante Telegram (`/activar`), el sensor vigila el entorno.
-3. Si detecta movimiento, graba un clip de vídeo H264 de 5 segundos, lo encapsula en MP4, lo envía a Telegram y rearma el sensor tras un cooldown de seguridad de 5 segundos.
+3. **Muestreo sostenido anti-falsos positivos**: Tras detectar un pulso inicial, el sistema ejecuta una ventana de muestreo continuado (5 lecturas espaciadas por 200 ms). Solo confirma el movimiento si el pin se mantiene en nivel `HIGH` en al menos el 80% de las muestras, descartando ruidos e interferencias de corta duración.
+4. Si se confirma el movimiento, graba un clip de vídeo H264 de 5 segundos, lo encapsula en MP4, lo envía a Telegram y rearma el sensor tras un cooldown de seguridad de 10 segundos.
 
 ### 📡 Streaming en vivo
 1. El servidor Express corre en segundo plano en el puerto 3000 de forma local.
@@ -220,6 +221,16 @@ sudo systemctl start detector-movimiento.service
   ```bash
   sudo systemctl stop detector-movimiento.service
   ```
+
+---
+
+## 🛡️ Prevención de Falsos Positivos
+
+Para garantizar máxima precisión y evitar disparos erróneos (por ruido eléctrico, cambios térmicos o interferencias), `pirController.js` incorpora los siguientes mecanismos:
+
+- **Algoritmo de Muestreo Sostenido**: Al activarse el flanco ascendente (`rising`), el sistema no graba inmediatamente. Realiza 5 lecturas consecutivas en un intervalo de 1 segundo (200 ms entre cada muestra). Si la señal `HIGH` no se sostiene en al menos el 80% (4 de 5 lecturas), el pulso se descarta automáticamente.
+- **Normalización de Configuración**: Validación explícita de `PIRPIN` a tipo numérico con valor por defecto seguro.
+- **Gestión de Recursos y Lock-File Multiplataforma**: Uso de `os.tmpdir()` para archivos de bloqueo de cámara (`camera_busy.lock`) e inhibición de observadores duplicados en el pin GPIO.
 
 ---
 
